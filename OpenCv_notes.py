@@ -2754,7 +2754,7 @@ def my_resize(img,times):
     h,w = img.shape[:2]
     img = cv2.resize(img,(int(w*times),int(h*times)),interpolation = cv2.INTER_CUBIC)
     return img
-
+'''
 def draw_rectangle(event,x,y,flags,param):
     global x0,y0,x1,y1,draw
     if event == cv2.EVENT_LBUTTONDOWN and draw == False:
@@ -2818,7 +2818,7 @@ while(1):
         break
 cv2.destroyAllWindows()
 cap.release()
-
+'''
 #Camshift
 #上面的结果存在一个问题,我们的窗口大小是固定的,而汽车由远及近(在视觉上)是一个逐渐变大的
 #过程,固定的窗口是不合适的,所以我们需要根据目标的大小和角度来对窗口的大小和角度进行修正
@@ -2886,5 +2886,118 @@ while(1):
 cv2.destroyAllWindows()
 cap.release()
 '''
+
+########
+# 光流 # 由于目标对象或者摄像机的移动造成的图像对象在连续两帧图像中的移动被称为光流.
+######## 它是一个2D向量场,可以用来显示一个点从第一帧图像到第二帧图像之间的移动.
+
+#光流在很多领域中都很有用：由运动重建结构；视频压缩；Video Stabilization等
+#光流是基于以下假设的：1.在连续的两帧图像之间(目标对象的)像素的灰度值不改变.
+###################### 2.相邻的像素具有相同的运动.
+
+#光流方程？
+
+#Lucas-Kanade法
+
+#Lucas-Kanade法使用第二条假设,利用一个3x3领域中的9个点具有相同运动的这一点,这样我们
+#就可以找到这9个点的光流方程,用它们组成一个具有两个未知数9个等式的方程组,这是一个约束
+#过多的方程组.一个好的解决办法就是使用最小二乘拟合.
+#但是这些只适合很小的运动,如果有大的运动怎么办呢？
+#图像金字塔,我们可以使用图像金字塔的顶层,此时小的运动被移除,大的运动换成了小的运动,
+#现在再使用Lucas-Kanade算法,我们就会得到尺度空间上的光流.
+
+#Opencv中的Lucas-Kanade光流
+#上述所有过程都被OpenCv打包成了一个函数：cv2.calcOpticalFlowPyrLK()
+#现在我们创建一个小程序来跟踪视频中的一些点.我们使用函数cv2.goodFeatureToTrack()来确定
+#要跟踪的点.我们首先在视频的第一帧图像中检测一些Shi-Tomasi角点,然后我们使用Lucas-Kanade
+#算法迭代跟踪这些角点.我们要给函数cv2.calcOpticalFlowPyrLK()传入前一帧图像和其中的点,
+#以及下一帧图像.函数将返回带有状态数的点,如果状态数是1,那说明在下一帧图像中找到了这个点
+#(上一帧中角点),如果状态数是0,则说明没有在下一帧图像中找到这个点. 我们再把这些点作为参
+#数传给函数,如此迭代下去实现跟踪。
+'''
+cap = cv2.VideoCapture('London_car_stream.mov')
+
+#ShiTomasi角点检测的参数
+feature_params = dict( maxCorners = 100, qualityLevel = 0.3,\
+                       minDistance = 7, blockSize = 7)
+#maxlevel 为使用的图像金字塔层数
+lk_params = dict( winSize = (15,15),
+                  maxLevel = 2,
+                  criteria = (cv2.TERM_CRITERIA_EPS|cv2.TERM_CRITERIA_COUNT,10,0.03))
+#创建一些颜色,此处创建100x3的0~255的随机数组                                                             10,0.03))
+color = np.random.randint(0,255,(100,3))
+
+ret,old_frame = cap.read()
+old_gray = cv2.cvtColor(old_frame,cv2.COLOR_BGR2GRAY)
+p0 = cv2.goodFeaturesToTrack(old_gray,mask = None,**feature_params)
+#创建一个掩膜来画光流
+mask = np.zeros_like(old_frame)
+j = 1
+
+while(1):
+    ret,frame = cap.read()
+    frame_gray = cv2.cvtColor(frame,cv2.COLOR_BGR2GRAY)
+    
+    p1,st,err = cv2.calcOpticalFlowPyrLK(old_gray, frame_gray, p0, None, **lk_params)
+    #选出状态数为1的点
+    good_new = p1[st==1]
+    good_old = p0[st==1]
+    #画出光流
+    for i,(new,old) in enumerate(zip(good_new,good_old)):
+        a,b = new.ravel()
+        c,d = old.ravel()
+        mask = cv2.line(mask,(a,b),(c,d),color[i].tolist(),2)
+        frame = cv2.circle(frame,(a,b),5,color[i].tolist(),-1)
+    img = cv2.add(frame,mask)
+    img = my_resize(img,0.5)
+    
+    cv2.imshow('frame',img)
+   
+    k = cv2.waitKey(30)
+    if k == 27:
+        break
+    if k == ord('s'):
+        cv2.imwrite('light_stream/light_stream_{}.jpg'.format(j),img)
+        j += 1
+    old_gray = frame_gray.copy()
+    p0 = good_new.reshape(-1,1,2)
+cv2.destroyAllWindows()
+cap.release()
+'''                                                             
+#Opencv中的稠密光流
+#Lucas-Kanade法是计算一些特征点的光流(我们上面的例子使用的是Shi-Tomasi 算法检测到的角
+#点). Opencv还提供了一种计算稠密光流的方法.它会计算图像中的所有点的光流,这是基于Gunner_Farneback算法
+cap = cv2.VideoCapture('London_car_stream.mov')
+
+ret, frame = cap.read()
+prvs = cv2.cvtColor(frame,cv2.COLOR_BGR2GRAY)
+hsv = np.zeros_like(frame)
+hsv[:,:,1] = 255
+
+while(1):
+    ret, frame2 = cap.read()
+    next = cv2.cvtColor(frame2,cv2.COLOR_BGR2GRAY)
+    flow = cv2.calcOpticalFlowFarneback(prvs,next,None, 0.5, 3, 15, 3, 5, 1.2, 0)
+    #得到光流的大小与方向
+    mag, ang = cv2.cartToPolar(flow[:,:,0],flow[:,:,1])
+    #构建一个带有光流向量的双通道数组,方向对应H通道,大小对应V通道
+    hsv[:,:,0] = (ang*180/np.pi)/2
+    hsv[:,:,2] = cv2.normalize(mag,None,0,255,cv2.NORM_MINMAX)
+    rgb = cv2.cvtColor(hsv,cv2.COLOR_HSV2BGR)
+    rgb = my_resize(rgb,0.5)
+    cv2.imshow('frame2',rgb)
+    k = cv2.waitKey(10)
+    if k==27:
+        break
+    elif k == ord('s'):
+        cv2.imwrite('opticalfb.png',frame2)
+        cv2.imwrite('opticalhsv.png',rgb)
+    prvs = next
+cap.release()
+cv2.destroyAllWindows()
+
+
+
+
 
 
