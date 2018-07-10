@@ -2967,6 +2967,7 @@ cap.release()
 #Opencv中的稠密光流
 #Lucas-Kanade法是计算一些特征点的光流(我们上面的例子使用的是Shi-Tomasi 算法检测到的角
 #点). Opencv还提供了一种计算稠密光流的方法.它会计算图像中的所有点的光流,这是基于Gunner_Farneback算法
+'''
 cap = cv2.VideoCapture('London_car_stream.mov')
 
 ret, frame = cap.read()
@@ -2995,6 +2996,80 @@ while(1):
     prvs = next
 cap.release()
 cv2.destroyAllWindows()
+'''
+
+############
+# 背景消除 # 技术上说,我们需要从静止的背景中提取移动的前景。
+############
+
+#BackgroundSubtractorMOG2
+#这时一个以混合高斯模型为基础的前景/背景分割算法.它为每一个像素选择一个合适数目的高
+#斯分布.使用这些颜色（在整个视频中）存在时间的长短作为混合的权重. 背景的颜色一般持续
+#的时间最长,而且更加静止. 一个像素怎么会有分布呢？在x,y平面上一个像素就是一个像素,没
+#有分布,但是我们现在讲的背景建模是基于时间序列的,因此每一个像素点所在的位置在整个时
+#间序列中就会有很多值,从而构成一个分布.
+
+#使用函数cv2.createBackgroundSubtractorMOG2()创建一个背景对象
+#如果参数detectShadows = True(默认值),它就会检测并将影子标记为灰色,但这样会降低速度
+#将它的参数全部设置为默认值,然后在整个视频中我们需要使用 backgroundsubtractor.apply()
+#得到前景的掩膜.
+'''
+cap = cv2.VideoCapture("London_car_stream.mov")
+
+fgbg = cv2.createBackgroundSubtractorMOG2()
+
+while(1):
+    ret, frame = cap.read()
+    #apply()方法得到前景掩膜
+    fgmask = fgbg.apply(frame)
+    fgmask = cv2.add(frame,frame,mask = fgmask)
+
+    fgmask = my_resize(fgmask,0.5)
+    cv2.imshow('frame',fgmask)
+    k = cv2.waitKey(30)
+    if k == 27:
+        break
+cap.release()
+cv2.destroyAllWindows()
+'''
+#BackgroundSubtractorGMG
+#此算法结合了静态背景图像估计和每个像素的贝叶斯分割. 它使用前面很少的图像(默认为前
+#120帧）进行背景建模. 使用了概率前景估计算法(使用贝叶斯估计鉴定前景). 这是一种自适
+#应的估计,新观察到的对象比旧的对象具有更高的权重,从而对光照变化产生适应.一些形态学
+#操作例如开、闭运算等用来去除不需要的噪音. 在前几帧图像中你会得到一个黑色窗口.
+#对结果进行形态学开运算对于去除噪声很有帮助.
+#此算法对计算速度要求高,谨慎调试
+'''
+kernel = cv2.getStructuringElement(cv2.MORPH_ELLIPSE,(3,3))
+fgbg = cv2.bgsegm.createBackgroundSubtractorGMG()
+
+while(1):
+    ret, frame = cap.read()
+
+    fgmask = fgbg.apply(frame)
+    fgmask = cv2.morphologyEx(fgmask, cv2.MORPH_OPEN, kernel)
+    
+    fgmask = my_resize(fgmask,0.5)
+    cv2.imshow('frame',fgmask)
+    k = cv2.waitKey(30)
+    if k == 27:
+        break
+cap.release()
+cv2.destroyAllWindows()
+'''
+
+######################
+# 摄像机标定和3D重构 #
+######################
+
+##############
+# 摄像机标定 #
+##############
+
+#基础：今天的单孔摄像机会给图像带来很多畸变,畸变主要有两种：径向畸变和切向畸变.
+
+
+
 
 
 
